@@ -1,3 +1,3 @@
-provider "scaffolding" {
-  # example configuration here
+provider "benthos" {
+  endpoint = "localhost:4195"
 }

@@ -1,4 +1,4 @@
-module github.com/hashicorp/terraform-provider-scaffolding-framework
+module github.com/sousa-andre/terraform-provider-benthos
 
 go 1.21
 

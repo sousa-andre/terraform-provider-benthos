@@ -1,93 +1,100 @@
-// Copyright (c) HashiCorp, Inc.
-// SPDX-License-Identifier: MPL-2.0
-
 package provider
 
 import (
 	"context"
-	"net/http"
-
+	"fmt"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
-	"github.com/hashicorp/terraform-plugin-framework/function"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/sousa-andre/terraform-provider-benthos/internal/client"
 )
 
-// Ensure ScaffoldingProvider satisfies various provider interfaces.
-var _ provider.Provider = &ScaffoldingProvider{}
-var _ provider.ProviderWithFunctions = &ScaffoldingProvider{}
+var _ provider.Provider = &benthosProvider{}
 
-// ScaffoldingProvider defines the provider implementation.
-type ScaffoldingProvider struct {
-	// version is set to the provider version on release, "dev" when the
-	// provider is built and ran locally, and "test" when running acceptance
-	// testing.
+type benthosProvider struct {
 	version string
 }
 
-// ScaffoldingProviderModel describes the provider data model.
-type ScaffoldingProviderModel struct {
+func New(version string) func() provider.Provider {
+	return func() provider.Provider {
+		return &benthosProvider{version: version}
+	}
+}
+
+type benthosProviderModel struct {
 	Endpoint types.String `tfsdk:"endpoint"`
+	Protocol types.String `tfsdk:"protocol"`
 }
 
-func (p *ScaffoldingProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
-	resp.TypeName = "scaffolding"
-	resp.Version = p.version
+func (p *benthosProvider) Metadata(ctx context.Context, req provider.MetadataRequest, res *provider.MetadataResponse) {
+	res.TypeName = "benthos"
+	res.Version = p.version
 }
 
-func (p *ScaffoldingProvider) Schema(ctx context.Context, req provider.SchemaRequest, resp *provider.SchemaResponse) {
-	resp.Schema = schema.Schema{
+func (p *benthosProvider) Schema(ctx context.Context, req provider.SchemaRequest, res *provider.SchemaResponse) {
+	res.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"endpoint": schema.StringAttribute{
-				MarkdownDescription: "Example provider attribute",
-				Optional:            true,
+				Required: true,
+			},
+			"protocol": schema.StringAttribute{
+				Optional: true,
 			},
 		},
 	}
 }
 
-func (p *ScaffoldingProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
-	var data ScaffoldingProviderModel
+func (p *benthosProvider) Configure(ctx context.Context, req provider.ConfigureRequest, res *provider.ConfigureResponse) {
+	var config benthosProviderModel
+	var endpoint, protocol string
 
-	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	diag := req.Config.Get(ctx, &config)
+	res.Diagnostics.Append(diag...)
 
-	if resp.Diagnostics.HasError() {
+	if res.Diagnostics.HasError() {
 		return
 	}
 
-	// Configuration values are now available.
-	// if data.Endpoint.IsNull() { /* ... */ }
-
-	// Example client configuration for data sources and resources
-	client := http.DefaultClient
-	resp.DataSourceData = client
-	resp.ResourceData = client
-}
-
-func (p *ScaffoldingProvider) Resources(ctx context.Context) []func() resource.Resource {
-	return []func() resource.Resource{
-		NewExampleResource,
+	if config.Endpoint.IsUnknown() {
+		res.Diagnostics.AddAttributeError(
+			path.Root("endpoint"),
+			"Missing Benthos Endpoint",
+			"Benthos provider Endpoint not specified. Please use the provider Endpoint attribute to set the API",
+		)
+		return
 	}
+
+	endpoint = config.Endpoint.ValueString()
+
+	protocol = config.Protocol.ValueString()
+	if protocol == "" {
+		protocol = "http"
+	}
+
+	client, err := client.NewClient(fmt.Sprintf("%s://%s", protocol, endpoint))
+	if err != nil {
+		res.Diagnostics.AddError(
+			"Failed to create the client",
+			"The Benthos client failed to initialize likely due to wrong credentials "+
+				"or failed connection",
+		)
+		return
+	}
+	res.ResourceData = client
+	res.DataSourceData = client
 }
 
-func (p *ScaffoldingProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
+func (p *benthosProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
-		NewExampleDataSource,
+		NewStreamDataSource,
 	}
 }
 
-func (p *ScaffoldingProvider) Functions(ctx context.Context) []func() function.Function {
-	return []func() function.Function{
-		NewExampleFunction,
-	}
-}
-
-func New(version string) func() provider.Provider {
-	return func() provider.Provider {
-		return &ScaffoldingProvider{
-			version: version,
-		}
+func (p *benthosProvider) Resources(ctx context.Context) []func() resource.Resource {
+	return []func() resource.Resource{
+		NewStreamResource,
 	}
 }
