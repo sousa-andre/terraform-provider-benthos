@@ -1,7 +1,7 @@
 # Benthos Provider
 
 > [!CAUTION]
-> This provider is in an early stage of development. Production usage is not recommened.
+> This provider is in an early stage of development. Production usage is not recommended.
 
 ## Requirements
 
